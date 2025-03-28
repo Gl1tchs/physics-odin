@@ -19,7 +19,6 @@ main :: proc() {
 		fmt.println("Failed to initialize GLFW")
 		return
 	}
-
 	defer glfw.Terminate()
 
 	window, ok := create_window(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT).?
@@ -29,6 +28,7 @@ main :: proc() {
 	}
 	defer destroy_window(&window)
 
+
 	// Enable depth testing
 	gl.Enable(gl.DEPTH_TEST)
 
@@ -36,8 +36,12 @@ main :: proc() {
 	COLLISION_MARGIN :: SPHERE_RADIUS * 1.05 // Slightly larger for safety
 	BOUNDARY_MARGIN :: SPHERE_RADIUS
 
-	sphere_primitive := create_sphere_primitive(SPHERE_RADIUS, 36, 18)
-	defer destroy_sphere_primitive(&sphere_primitive)
+	sphere_primitive := sphere_primitive_create(SPHERE_RADIUS, 36, 18)
+	defer sphere_primitive_destroy(&sphere_primitive)
+
+	when ODIN_DEBUG {
+		debug_shader := load_shader("shaders/cube.frag", "shaders/cube.vert")
+	}
 
 	camera := Camera {
 		pos  = [3]f32{0, 0, 30},
@@ -81,7 +85,7 @@ main :: proc() {
 
 	// Octree for colision optimization
 	ot := new_octree_from_world_bounds(window.handle, camera)
-	defer clear_octree(ot)
+	defer octree_clear(ot)
 
 	current_time := f32(glfw.GetTime())
 	last_time := current_time
@@ -111,9 +115,9 @@ main :: proc() {
 		}
 
 		// Sphere collision detection
-		clear_octree(ot)
+		octree_clear(ot)
 		for sphere, i in spheres {
-			insert_octree(ot, spheres[:], i)
+			octree_insert(ot, spheres[:], i)
 		}
 
 		QUERY_RADIUS :: SPHERE_RADIUS * 1.5
@@ -123,7 +127,7 @@ main :: proc() {
 			nearby_indices: [dynamic]int
 			defer delete(nearby_indices)
 
-			query_octree(ot, spheres[:], sphere.pos, QUERY_RADIUS, &nearby_indices)
+			octree_query(ot, spheres[:], sphere.pos, QUERY_RADIUS, &nearby_indices)
 
 			for j in nearby_indices {
 				if i == j do continue // Skip self-collision
@@ -186,11 +190,16 @@ main :: proc() {
 
 		gl.DrawElementsInstanced(
 			gl.TRIANGLES,
-			cast(i32)len(sphere_primitive.indices),
+			sphere_primitive.index_count,
 			gl.UNSIGNED_INT,
 			nil,
 			i32(len(sphere_offsets)),
 		)
+
+		when ODIN_DEBUG {
+			octree_render_debug(ot, debug_shader, &view_proj)
+		}
+
 		gl.BindVertexArray(0)
 
 		window_swap_buffers(window)
@@ -209,7 +218,7 @@ new_octree_from_world_bounds :: proc(window: glfw.WindowHandle, camera: Camera) 
 		min = {left, bottom, -1.0}, // Z bounds can be small since we're in 2D
 		max = {right, top, 1.0},
 	}
-	return new_octree(ot_bounds, max_objects = 4, max_levels = 5)
+	return octree_new(ot_bounds, max_objects = 4, max_levels = 5)
 
 }
 

@@ -14,11 +14,10 @@ SpherePrimitive :: struct {
 	index_buffer:    u32,
 	instance_buffer: u32,
 	shader:          Shader,
-	vertices:        [dynamic]SphereVertex,
-	indices:         [dynamic]u32,
+	index_count:     i32,
 }
 
-create_sphere_primitive :: proc(
+sphere_primitive_create :: proc(
 	radius: f32,
 	sector_count: u32,
 	stack_count: u32,
@@ -144,7 +143,7 @@ create_sphere_primitive :: proc(
 	)
 
 	// Create shader program
-	shader := load_shader("shaders/sphere_fragment.glsl", "shaders/sphere_vertex.glsl")
+	shader := load_shader("shaders/sphere.frag", "shaders/sphere.vert")
 
 	gl.BindVertexArray(0)
 
@@ -154,12 +153,11 @@ create_sphere_primitive :: proc(
 		index_buffer,
 		instance_buffer,
 		shader,
-		vertices,
-		indices,
+		cast(i32)len(indices),
 	}
 }
 
-destroy_sphere_primitive :: proc(primitive: ^SpherePrimitive) {
+sphere_primitive_destroy :: proc(primitive: ^SpherePrimitive) {
 	if primitive.vertex_array != 0 {
 		gl.DeleteVertexArrays(1, &primitive.vertex_array)
 	}
