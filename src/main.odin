@@ -36,28 +36,22 @@ main :: proc() {
 	sphere_primitive := create_sphere_primitive(SPHERE_RADIUS, 36, 18)
 	defer destroy_sphere_primitive(&sphere_primitive)
 
-	view := linalg.matrix4_look_at([3]f32{0, 0, 30}, [3]f32{0, 0, 0}, [3]f32{0, 1, 0})
-	projection := linalg.matrix4_perspective(
-		math.to_radians(f32(45.0)),
-		f32(WINDOW_WIDTH) / f32(WINDOW_HEIGHT),
-		0.1,
-		100.0,
-	)
+	camera := Camera {
+		pos  = [3]f32{0, 0, 30},
+		fov  = 45.0,
+		near = 0.1,
+		far  = 100.0,
+	}
+
+	view_proj := camera_get_view_proj(camera, f32(WINDOW_WIDTH) / f32(WINDOW_HEIGHT))
 
 	// Set uniforms
 	gl.UseProgram(sphere_primitive.shader.id)
-
 	gl.UniformMatrix4fv(
-		gl.GetUniformLocation(sphere_primitive.shader.id, "view"),
+		gl.GetUniformLocation(sphere_primitive.shader.id, "view_proj"),
 		1,
 		false,
-		&view[0][0],
-	)
-	gl.UniformMatrix4fv(
-		gl.GetUniformLocation(sphere_primitive.shader.id, "projection"),
-		1,
-		false,
-		&projection[0][0],
+		&view_proj[0][0],
 	)
 
 	initial_acc := [3]f32{0, -9.81, 0}
