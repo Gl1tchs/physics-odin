@@ -6,11 +6,13 @@
     - [ ] Instancing
 - [ ] Orbital camera
     - [ ] Camera controls
-- [ ] Verlet integration
+- [x] Verlet integration
 - [ ] Rigidbody implementation
-- [ ] Sphere collision
-- [ ] Forces
+- [x] Sphere collision
+- [x] Forces
 - [ ] Gravity
 - [ ] Friction
 - [ ] Joints
 - [ ] Springs
+- [ ] Gas simulation
+    - [ ] Ideal gas law

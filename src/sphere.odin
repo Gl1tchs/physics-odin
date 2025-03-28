@@ -23,7 +23,10 @@ create_sphere_primitive :: proc(
 	stack_count: u32,
 ) -> SpherePrimitive {
 	vertices: [dynamic]SphereVertex
+	defer delete(vertices)
+
 	indices: [dynamic]u32
+	defer delete(indices)
 
 	length_inv := 1.0 / f32(radius)
 	sector_step := 2 * math.PI / f32(sector_count)
