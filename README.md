@@ -3,14 +3,15 @@
 ## TODO
 
 - [x] Sphere renderering
-    - [ ] Instancing
+    - [x] Instancing
 - [ ] Orbital camera
     - [ ] Camera controls
 - [x] Verlet integration
 - [ ] Rigidbody implementation
 - [x] Sphere collision
+    - [x] Octree
 - [x] Forces
-- [ ] Gravity
+- [x] Gravity
 - [ ] Friction
 - [ ] Joints
 - [ ] Springs
