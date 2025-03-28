@@ -1,5 +1,6 @@
 package main
 
+import "core:math"
 import "core:math/linalg"
 
 PhysicsBody :: struct {
@@ -23,33 +24,36 @@ apply_force :: proc(force: [3]f32, mass: f32, acc: ^[3]f32) {
 }
 
 sphere_vs_sphere :: proc(
-	sphere1: ^PhysicsBody,
-	sphere2: ^PhysicsBody,
+	sphere1: [3]f32,
+	sphere2: [3]f32,
 	radius: f32 = 1.0,
 ) -> (
 	bool,
 	f32,
 	[3]f32,
 ) {
-	// Calculate distance and squared distance between spheres
-	delta := sphere1.pos - sphere2.pos
+	delta := sphere1 - sphere2
 	distance_squared := linalg.dot(delta, delta)
 	min_distance := radius + radius
 	min_distance_squared := min_distance * min_distance
+
+	if distance_squared < 1e-6 { 	// Almost same position
+		return true, min_distance, {1, 0, 0} // Arbitrary normal (e.g., x-axis)
+	}
 
 	if distance_squared >= min_distance_squared {
 		return false, 0, {}
 	}
 
-	distance := linalg.length(delta)
-	normal := delta / max(distance, 1e-6) // Avoid division by zero
+	distance := math.sqrt(distance_squared)
+	normal := delta / distance // Safe since distance > 0
 	penetration := min_distance - distance
 
 	return true, penetration, normal
 }
 
 resolve_sphere_collision :: proc(sphere1: ^PhysicsBody, sphere2: ^PhysicsBody, radius: f32 = 1.0) {
-	collided, penetration, normal := sphere_vs_sphere(sphere1, sphere2, radius)
+	collided, penetration, normal := sphere_vs_sphere(sphere1.pos, sphere2.pos, radius)
 
 	if !collided do return
 

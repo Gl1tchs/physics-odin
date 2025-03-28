@@ -9,12 +9,13 @@ SphereVertex :: struct {
 }
 
 SpherePrimitive :: struct {
-	vao:      u32,
-	vbo:      u32,
-	ebo:      u32,
-	shader:   Shader,
-	vertices: [dynamic]SphereVertex,
-	indices:  [dynamic]u32,
+	vertex_array:    u32,
+	vertex_buffer:   u32,
+	index_buffer:    u32,
+	instance_buffer: u32,
+	shader:          Shader,
+	vertices:        [dynamic]SphereVertex,
+	indices:         [dynamic]u32,
 }
 
 create_sphere_primitive :: proc(
@@ -86,24 +87,36 @@ create_sphere_primitive :: proc(
 	}
 
 	// Create VAO, VBO, and EBO
-	vao: u32
-	gl.GenVertexArrays(1, &vao)
-	gl.BindVertexArray(vao)
+	vertex_array: u32
+	gl.GenVertexArrays(1, &vertex_array)
+	gl.BindVertexArray(vertex_array)
 
-	vbo: u32
-	gl.GenBuffers(1, &vbo)
-	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
+	vertex_buffer: u32
+	gl.GenBuffers(1, &vertex_buffer)
+	gl.BindBuffer(gl.ARRAY_BUFFER, vertex_buffer)
 	gl.BufferData(
 		gl.ARRAY_BUFFER,
 		len(vertices) * size_of(SphereVertex),
 		&vertices[0],
 		gl.STATIC_DRAW,
 	)
+	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 
-	gl.EnableVertexArrayAttrib(vao, 0)
+	// Create instance buffer
+	instance_buffer: u32
+	gl.GenBuffers(1, &instance_buffer)
+
+	gl.BindBuffer(gl.ARRAY_BUFFER, instance_buffer)
+	gl.BufferData(gl.ARRAY_BUFFER, size_of([3]f32) * 100_000, nil, gl.DYNAMIC_DRAW)
+	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+
+	// Set-Up vertex data
+	gl.BindBuffer(gl.ARRAY_BUFFER, vertex_buffer)
+
+	gl.EnableVertexArrayAttrib(vertex_array, 0)
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, size_of(SphereVertex), 0)
 
-	gl.EnableVertexArrayAttrib(vao, 1)
+	gl.EnableVertexArrayAttrib(vertex_array, 1)
 	gl.VertexAttribPointer(
 		1,
 		3,
@@ -113,9 +126,15 @@ create_sphere_primitive :: proc(
 		offset_of(SphereVertex, normal),
 	)
 
-	ebo: u32
-	gl.GenBuffers(1, &ebo)
-	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
+	gl.BindBuffer(gl.ARRAY_BUFFER, instance_buffer)
+
+	gl.EnableVertexAttribArray(2)
+	gl.VertexAttribPointer(2, 3, gl.FLOAT, false, 3 * size_of(f32), 0)
+	gl.VertexAttribDivisor(2, 1)
+
+	index_buffer: u32
+	gl.GenBuffers(1, &index_buffer)
+	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, index_buffer)
 
 	gl.BufferData(
 		gl.ELEMENT_ARRAY_BUFFER,
@@ -129,18 +148,26 @@ create_sphere_primitive :: proc(
 
 	gl.BindVertexArray(0)
 
-	return SpherePrimitive{vao, vbo, ebo, shader, vertices, indices}
+	return SpherePrimitive {
+		vertex_array,
+		vertex_buffer,
+		index_buffer,
+		instance_buffer,
+		shader,
+		vertices,
+		indices,
+	}
 }
 
 destroy_sphere_primitive :: proc(primitive: ^SpherePrimitive) {
-	if primitive.vao != 0 {
-		gl.DeleteVertexArrays(1, &primitive.vao)
+	if primitive.vertex_array != 0 {
+		gl.DeleteVertexArrays(1, &primitive.vertex_array)
 	}
-	if primitive.vbo != 0 {
-		gl.DeleteBuffers(1, &primitive.vbo)
+	if primitive.vertex_buffer != 0 {
+		gl.DeleteBuffers(1, &primitive.vertex_buffer)
 	}
-	if primitive.ebo != 0 {
-		gl.DeleteBuffers(1, &primitive.ebo)
+	if primitive.index_buffer != 0 {
+		gl.DeleteBuffers(1, &primitive.index_buffer)
 	}
 	if primitive.shader.id != 0 {
 		gl.DeleteProgram(primitive.shader.id)

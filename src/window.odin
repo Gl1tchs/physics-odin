@@ -9,13 +9,13 @@ Window :: struct {
 	handle: glfw.WindowHandle,
 }
 
-create_window :: proc(title: string, width: int, height: int) -> Maybe(Window) {
-	glfw.WindowHint(glfw.RESIZABLE, 1)
+create_window :: proc(title: string, width: i32, height: i32) -> Maybe(Window) {
+	glfw.WindowHint(glfw.RESIZABLE, 0)
 	glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 4)
 	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 6)
 	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
 
-	handle := glfw.CreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE, nil, nil)
+	handle := glfw.CreateWindow(width, height, WINDOW_TITLE, nil, nil)
 	if handle == nil {
 		return nil
 	}
@@ -23,7 +23,7 @@ create_window :: proc(title: string, width: int, height: int) -> Maybe(Window) {
 	glfw.MakeContextCurrent(handle)
 
 	// Enable VSync
-	glfw.SwapInterval(1)
+	// glfw.SwapInterval(1)
 
 	// Set window callbacks
 	glfw.SetKeyCallback(handle, key_callback)
