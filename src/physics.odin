@@ -88,3 +88,37 @@ resolve_sphere_collision :: proc(sphere1: ^PhysicsBody, sphere2: ^PhysicsBody, r
 	sphere1.pos += small_separation
 	sphere2.pos -= small_separation
 }
+
+resolve_elastic_collision :: proc(a, b: ^PhysicsBody, radius: f32 = 1.0) {
+	delta := a.pos - b.pos
+	distance := linalg.length(delta)
+	min_distance := radius * 2
+
+	if distance < min_distance {
+		// Normal vector
+		n := delta / distance
+
+		// Relative velocity
+		v_rel := a.vel - b.vel
+
+		// Velocity along normal
+		vn := linalg.dot(v_rel, n)
+
+		// Only collide if moving toward each other
+		if vn < 0 {
+			// Impulse scalar
+			j := -(1 + 1) * vn // 1 = coefficient of restitution (perfectly elastic)
+			j /= 1 / a.mass + 1 / b.mass
+
+			// Apply impulse
+			impulse := j * n
+			a.vel += impulse / a.mass
+			b.vel -= impulse / b.mass
+
+			// Position correction to prevent sticking
+			correction := (min_distance - distance) * 0.5 * n
+			a.pos += correction
+			b.pos -= correction
+		}
+	}
+}

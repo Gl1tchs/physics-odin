@@ -14,6 +14,47 @@ WINDOW_TITLE :: "Odin Physics"
 WINDOW_WIDTH :: 800
 WINDOW_HEIGHT :: 600
 
+// Constants for gas simulation
+PARTICLE_COUNT :: 1000 // Number of gas particles
+INITIAL_TEMPERATURE: f32 : 300.0 // Kelvin
+PARTICLE_MASS: f32 : 15.999 // Molar mass of Oxygen
+BOLTZMANN_CONSTANT: f32 : 1.380649e-23
+
+// Replace your sphere initialization with this
+init_gas_particles :: proc(spheres: ^[dynamic]PhysicsBody, temparature: f32, bounds: Bounds) {
+	clear(spheres)
+
+	avg_speed: f32 = get_avg_speed(temparature)
+
+	// Calculate average velocity based on temperature
+	for _ in 0 ..< PARTICLE_COUNT {
+		pos := [3]f32 {
+			rand.float32_range(bounds.left, bounds.right),
+			rand.float32_range(bounds.bottom, bounds.top),
+			0,
+		}
+
+		// Random direction with magnitude based on temperature
+		angle := rand.float32_range(0, 2 * math.PI)
+		speed := rand.float32_range(0.5 * avg_speed, 1.5 * avg_speed) // Some variation
+		vel := [3]f32{math.cos(angle) * speed, math.sin(angle) * speed, 0}
+
+		append(
+			spheres,
+			PhysicsBody {
+				pos  = pos,
+				vel  = vel,
+				acc  = [3]f32{0, 0, 0}, // No gravity in ideal gas
+				mass = PARTICLE_MASS,
+			},
+		)
+	}
+}
+
+get_avg_speed :: proc(temp: f32) -> f32 {
+	return math.sqrt(3 * BOLTZMANN_CONSTANT * temp / PARTICLE_MASS)
+}
+
 main :: proc() {
 	if !glfw.Init() {
 		fmt.println("Failed to initialize GLFW")
@@ -64,28 +105,17 @@ main :: proc() {
 	spheres: [dynamic]PhysicsBody
 	defer delete(spheres)
 
-	left, right, bottom, top := calculate_world_bounds(
-		camera,
-		f32(WINDOW_WIDTH) / f32(WINDOW_HEIGHT),
-	)
-
-	x_start := left + BOUNDARY_MARGIN
-	x_end := right - BOUNDARY_MARGIN
-	y_start := top - BOUNDARY_MARGIN
-	y_bottom := bottom + BOUNDARY_MARGIN * 3.0 // Leave more space at bottom
-
-	for i: f32 = x_start * 0.5; i <= x_end * 0.5; i += 0.5 {
-		for j: f32 = y_start; j >= y_bottom * 0.2; j -= 0.5 {
-			append(
-				&spheres,
-				PhysicsBody{[3]f32{i, j, 0}, [3]f32{0, 0, 0}, [3]f32{0, -9.81, 0}, 1.0},
-			)
-		}
-	}
-
 	// Octree for colision optimization
 	ot := new_octree_from_world_bounds(window.handle, camera)
 	defer octree_clear(ot)
+
+	wall_collisions: int
+	last_pressure_update := f32(glfw.GetTime())
+	pressure: f32
+	temparature := INITIAL_TEMPERATURE
+
+	bounds := calculate_world_bounds(camera, f32(WINDOW_WIDTH) / f32(WINDOW_HEIGHT))
+	init_gas_particles(&spheres, temparature, bounds)
 
 	current_time := f32(glfw.GetTime())
 	last_time := current_time
@@ -96,17 +126,17 @@ main :: proc() {
 		delta_time := current_time - last_time
 		last_time = current_time
 
-		builder := strings.builder_make()
-		defer strings.builder_destroy(&builder)
-
-		title := fmt.sbprintf(&builder, "%s (FPS: %.2f)", WINDOW_TITLE, 1 / delta_time)
-
-		title_cstr, err := strings.to_cstring(&builder)
-		if err == nil {
-			glfw.SetWindowTitle(window.handle, title_cstr)
+		// Temparature controls
+		if glfw.GetKey(window.handle, glfw.KEY_UP) == glfw.PRESS {
+			temparature += 10.0
+			init_gas_particles(&spheres, temparature, bounds)
+			fmt.printfln("Temparature: %.2f", temparature)
 		}
-
-		handle_forces(window.handle, &spheres)
+		if glfw.GetKey(window.handle, glfw.KEY_DOWN) == glfw.PRESS {
+			temparature = max(10.0, temparature - 10.0)
+			init_gas_particles(&spheres, temparature, bounds)
+			fmt.printfln("Temparature: %.2f", temparature)
+		}
 
 		// Simulate physics for each sphere
 		for i in 0 ..< len(spheres) {
@@ -122,6 +152,7 @@ main :: proc() {
 
 		QUERY_RADIUS :: SPHERE_RADIUS * 1.5
 
+		// Perfectly elastic particle collisions
 		for i in 0 ..< len(spheres) {
 			sphere := &spheres[i]
 			nearby_indices: [dynamic]int
@@ -130,37 +161,77 @@ main :: proc() {
 			octree_query(ot, spheres[:], sphere.pos, QUERY_RADIUS, &nearby_indices)
 
 			for j in nearby_indices {
-				if i == j do continue // Skip self-collision
-				resolve_sphere_collision(sphere, &spheres[j], SPHERE_RADIUS)
+				if i == j do continue
+				resolve_elastic_collision(sphere, &spheres[j])
 			}
 		}
 
 		margin: f32 = SPHERE_RADIUS * 1.1 // Slightly larger than sphere radius
 
+		// Wall collisions (track for pressure calculation)
 		for i in 0 ..< len(spheres) {
 			sphere := &spheres[i]
 
-			// Check and resolve each axis independently
-			if sphere.pos.y < bottom + margin {
-				penetration := (bottom + margin) - sphere.pos.y
-				sphere.pos.y += penetration
-				sphere.vel.y = -sphere.vel.y * 0.8
+			if sphere.pos.y < bounds.bottom + margin {
+				sphere.pos.y = bounds.bottom + margin
+				sphere.vel.y = -sphere.vel.y // Perfectly elastic
+				wall_collisions += 1
 			}
-			if sphere.pos.y > top - margin {
-				penetration := sphere.pos.y - (top - margin)
-				sphere.pos.y -= penetration
-				sphere.vel.y = -sphere.vel.y * 0.8
+			if sphere.pos.y > bounds.top - margin {
+				sphere.pos.y = bounds.top - margin
+				sphere.vel.y = -sphere.vel.y
+				wall_collisions += 1
 			}
-			if sphere.pos.x < left + margin {
-				penetration := (left + margin) - sphere.pos.x
-				sphere.pos.x += penetration
-				sphere.vel.x = -sphere.vel.x * 0.8
+			if sphere.pos.x < bounds.left + margin {
+				sphere.pos.x = bounds.left + margin
+				sphere.vel.x = -sphere.vel.x
+				wall_collisions += 1
 			}
-			if sphere.pos.x > right - margin {
-				penetration := sphere.pos.x - (right - margin)
-				sphere.pos.x -= penetration
-				sphere.vel.x = -sphere.vel.x * 0.8
+			if sphere.pos.x > bounds.right - margin {
+				sphere.pos.x = bounds.right - margin
+				sphere.vel.x = -sphere.vel.x
+				wall_collisions += 1
 			}
+		}
+
+		// Calculate pressure periodically
+		if current_time - last_pressure_update > 0.5 {
+			// Area of container walls (approximate)
+			width := bounds.right - bounds.left
+			height := bounds.top - bounds.bottom
+			area := 2 * (width + height) // Perimeter in 2D
+
+			// Time since last update
+			delta_t := current_time - last_pressure_update
+
+			// Pressure = (impulse per time) / area
+			// Each collision contributes 2*m*v (perfectly elastic)
+			// We approximate by using average velocity
+			avg_velocity := get_avg_speed(temparature)
+			pressure =
+				f32(wall_collisions) * 2 * PARTICLE_MASS * avg_velocity / (f32(delta_t) * area)
+
+			// Update window title with pressure info
+			builder := strings.builder_make()
+			defer strings.builder_destroy(&builder)
+
+			title := fmt.sbprintf(
+				&builder,
+				"%s (FPS: %.0f) | Particles: %d | Temparature: %.2fK | Pressure: %.2e Pa",
+				WINDOW_TITLE,
+				1 / delta_time,
+				PARTICLE_COUNT,
+				temparature,
+				pressure,
+			)
+			title_cstr, err := strings.to_cstring(&builder)
+			if err == nil {
+				glfw.SetWindowTitle(window.handle, title_cstr)
+			}
+
+			// Reset counters
+			wall_collisions = 0
+			last_pressure_update = current_time
 		}
 
 		gl.ClearColor(0.1, 0.1, 0.1, 1.0)
@@ -197,7 +268,7 @@ main :: proc() {
 		)
 
 		when ODIN_DEBUG {
-			octree_render_debug(ot, debug_shader, &view_proj)
+			// octree_render_debug(ot, debug_shader, &view_proj)
 		}
 
 		gl.BindVertexArray(0)
@@ -208,72 +279,30 @@ main :: proc() {
 
 new_octree_from_world_bounds :: proc(window: glfw.WindowHandle, camera: Camera) -> ^Octree {
 	// Sphere collision detection
-	left, right, bottom, top := calculate_world_bounds(
-		camera,
-		f32(WINDOW_WIDTH) / f32(WINDOW_HEIGHT),
-	)
+	bounds := calculate_world_bounds(camera, f32(WINDOW_WIDTH) / f32(WINDOW_HEIGHT))
 	ot_bounds := struct {
 		min, max: [3]f32,
 	} {
-		min = {left, bottom, -1.0}, // Z bounds can be small since we're in 2D
-		max = {right, top, 1.0},
+		min = {bounds.left, bounds.bottom, -1.0}, // Z bounds can be small since we're in 2D
+		max = {bounds.right, bounds.top, 1.0},
 	}
 	return octree_new(ot_bounds, max_objects = 4, max_levels = 5)
 
 }
 
-calculate_world_bounds :: proc(
-	camera: Camera,
-	aspect_ratio: f32,
-) -> (
+Bounds :: struct {
 	left, right, bottom, top: f32,
-) {
+}
+
+calculate_world_bounds :: proc(camera: Camera, aspect_ratio: f32) -> Bounds {
 	// Calculate the visible height at the camera's position
 	half_height := math.tan(camera.fov * math.PI / 360.0) * math.abs(camera.pos.z)
 	half_width := half_height * aspect_ratio
 
-	left = camera.pos.x - half_width
-	right = camera.pos.x + half_width
-	bottom = camera.pos.y - half_height
-	top = camera.pos.y + half_height
+	left := camera.pos.x - half_width
+	right := camera.pos.x + half_width
+	bottom := camera.pos.y - half_height
+	top := camera.pos.y + half_height
 
-	return
-}
-
-handle_forces :: proc(window: glfw.WindowHandle, spheres: ^[dynamic]PhysicsBody) {
-	// Apply force if mouse is pressed
-	if glfw.GetMouseButton(window, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS {
-		mouse_x, mouse_y := glfw.GetCursorPos(window)
-		mouse_x = (mouse_x / f64(WINDOW_WIDTH)) * 2.0 - 1.0
-		mouse_y = 1.0 - (mouse_y / f64(WINDOW_HEIGHT)) * 2.0
-
-		for i in 0 ..< len(spheres) {
-			sphere := &spheres[i]
-
-			force := linalg.Vector3f32{f32(mouse_x), f32(mouse_y), 0}
-
-			apply_force(force, 1.0, &sphere.acc)
-		}
-	} else if glfw.GetMouseButton(window, glfw.MOUSE_BUTTON_RIGHT) == glfw.RELEASE {
-		for i in 0 ..< len(spheres) {
-			spheres[i].acc = [3]f32{0, -9.81, 0}
-		}
-	}
-
-	// Add random force to spheres if space is pressed
-	if glfw.GetKey(window, glfw.KEY_SPACE) == glfw.PRESS {
-		for i in 0 ..< len(spheres) {
-			sphere := &spheres[i]
-
-			force := linalg.Vector3f32 {
-				rand.float32_range(-10.0, 10.0),
-				rand.float32_range(-10.0, 10.0),
-				0,
-			}
-			force *= 50.0
-
-			apply_force(force, 1.0, &sphere.acc)
-		}
-	}
-
+	return Bounds{left, right, bottom, top}
 }
