@@ -21,10 +21,10 @@ PARTICLE_MASS: f32 : 15.999 // Molar mass of Oxygen
 BOLTZMANN_CONSTANT: f32 : 1.380649e-23
 
 // Replace your sphere initialization with this
-init_gas_particles :: proc(spheres: ^[dynamic]PhysicsBody, temparature: f32, bounds: Bounds) {
+init_gas_particles :: proc(spheres: ^[dynamic]PhysicsBody, temperature: f32, bounds: Bounds) {
 	clear(spheres)
 
-	avg_speed: f32 = get_avg_speed(temparature)
+	avg_speed: f32 = get_avg_speed(temperature)
 
 	// Calculate average velocity based on temperature
 	for _ in 0 ..< PARTICLE_COUNT {
@@ -112,10 +112,10 @@ main :: proc() {
 	wall_collisions: int
 	last_pressure_update := f32(glfw.GetTime())
 	pressure: f32
-	temparature := INITIAL_TEMPERATURE
+	temperature := INITIAL_TEMPERATURE
 
 	bounds := calculate_world_bounds(camera, f32(WINDOW_WIDTH) / f32(WINDOW_HEIGHT))
-	init_gas_particles(&spheres, temparature, bounds)
+	init_gas_particles(&spheres, temperature, bounds)
 
 	current_time := f32(glfw.GetTime())
 	last_time := current_time
@@ -126,16 +126,16 @@ main :: proc() {
 		delta_time := current_time - last_time
 		last_time = current_time
 
-		// Temparature controls
+		// temperature controls
 		if glfw.GetKey(window.handle, glfw.KEY_UP) == glfw.PRESS {
-			temparature += 10.0
-			init_gas_particles(&spheres, temparature, bounds)
-			fmt.printfln("Temparature: %.2f", temparature)
+			temperature += 10.0
+			init_gas_particles(&spheres, temperature, bounds)
+			fmt.printfln("temperature: %.2f", temperature)
 		}
 		if glfw.GetKey(window.handle, glfw.KEY_DOWN) == glfw.PRESS {
-			temparature = max(10.0, temparature - 10.0)
-			init_gas_particles(&spheres, temparature, bounds)
-			fmt.printfln("Temparature: %.2f", temparature)
+			temperature = max(10.0, temperature - 10.0)
+			init_gas_particles(&spheres, temperature, bounds)
+			fmt.printfln("temperature: %.2f", temperature)
 		}
 
 		// Simulate physics for each sphere
@@ -207,7 +207,7 @@ main :: proc() {
 			// Pressure = (impulse per time) / area
 			// Each collision contributes 2*m*v (perfectly elastic)
 			// We approximate by using average velocity
-			avg_velocity := get_avg_speed(temparature)
+			avg_velocity := get_avg_speed(temperature)
 			pressure =
 				f32(wall_collisions) * 2 * PARTICLE_MASS * avg_velocity / (f32(delta_t) * area)
 
@@ -217,11 +217,11 @@ main :: proc() {
 
 			title := fmt.sbprintf(
 				&builder,
-				"%s (FPS: %.0f) | Particles: %d | Temparature: %.2fK | Pressure: %.2e Pa",
+				"%s (FPS: %.0f) | Particles: %d | Temperature: %.2fK | Pressure: %.2e Pa",
 				WINDOW_TITLE,
 				1 / delta_time,
 				PARTICLE_COUNT,
-				temparature,
+				temperature,
 				pressure,
 			)
 			title_cstr, err := strings.to_cstring(&builder)
